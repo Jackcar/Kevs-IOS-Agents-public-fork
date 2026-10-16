@@ -117,14 +117,17 @@ node --version
 brew services start postgresql@17
 pg_isready -h 127.0.0.1
 mkdir -p "$HOME/Developer"
-git clone https://github.com/kevinbadi/Kevs-IOS-Agents.git "$HOME/Developer/Kevs-IOS-Agents"
+git clone https://github.com/Jackcar/Kevs-IOS-Agents.git "$HOME/Developer/Kevs-IOS-Agents"
 cd "$HOME/Developer/Kevs-IOS-Agents"
+git remote add upstream https://github.com/kevinbadi/Kevs-IOS-Agents.git
 npm ci
 npm run appium:install-driver
 npm run check
 ```
 
 Authenticate Git with an account that can access the repository if prompted.
+Clone the `Jackcar` fork to get the committed local changes. `origin` is your
+fork for future pushes; `upstream` tracks the original project's updates.
 Put the Node and PostgreSQL bin paths in your shell profile for future terminals.
 Use the source database's major version or a newer supported version when
 restoring; do not downgrade a PostgreSQL 17 dump into PostgreSQL 15. Use just
