@@ -9,6 +9,7 @@ It runs locally as-is; authentication is optional on a loopback bind. Harden it 
 ## Documentation
 
 - [docs/getting-started.md](docs/getting-started.md) — install, configure, run, register a device
+- [docs/mac-mini-migration.md](docs/mac-mini-migration.md) — move to a new Mac mini, transfer local state, restore the database, and finish host setup
 - [docs/architecture.md](docs/architecture.md) — the four processes, data stores, task model, source map
 - [docs/plugins.md](docs/plugins.md) — write a plugin: tasks, execution context, versioning, panels, routes
 - [docs/coordinates.md](docs/coordinates.md) — tap-layout profiles and how to add one

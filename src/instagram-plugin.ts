@@ -17,6 +17,7 @@ import { summarizeLeadLists, validateLeadListName } from './instagram/leads.js';
 export interface InstagramPluginConfiguration {
     doomscrollEntrypoint?: string;
     doomscrollFollowingEntrypoint?: string;
+    topicEngagementEntrypoint?: string;
     coldDmsEntrypoint?: string;
     postEntrypoint?: string;
     bundleId?: string;
@@ -26,10 +27,15 @@ type DoomscrollPayload = JsonObject & {
     durationMinutes: number;
     personality: 'skimmer' | 'casual' | 'engaged' | 'dialed';
     likeEnabled: boolean;
+    watchToEndEnabled: boolean;
     commentEnabled: boolean;
+    commentMode: 'preset' | 'meta-ai';
     commentText?: string;
+    commentNiche?: string;
     account?: string;
 };
+
+type TopicEngagementPayload = DoomscrollPayload & { searchTopic: string };
 
 type PostMedia = JsonObject & {
     assetId: string;
@@ -84,8 +90,8 @@ function validateDoomscrollPayload(value: JsonValue): DoomscrollPayload {
     const input = objectPayload(value);
     const durationMinutes = input.durationMinutes;
     const personality = input.personality;
-    if (!Number.isInteger(durationMinutes) || typeof durationMinutes !== 'number' || durationMinutes < 1 || durationMinutes > 180) {
-        throw new Error('durationMinutes must be between 1 and 180');
+    if (!Number.isInteger(durationMinutes) || typeof durationMinutes !== 'number' || durationMinutes < 1 || durationMinutes > 360) {
+        throw new Error('durationMinutes must be between 1 and 360');
     }
     if (personality !== 'skimmer' && personality !== 'casual' && personality !== 'engaged' && personality !== 'dialed') {
         throw new Error('Invalid personality');
@@ -96,16 +102,28 @@ function validateDoomscrollPayload(value: JsonValue): DoomscrollPayload {
     if (typeof input.commentEnabled !== 'boolean') {
         throw new Error('commentEnabled must be boolean');
     }
+    if (input.watchToEndEnabled !== undefined && typeof input.watchToEndEnabled !== 'boolean') {
+        throw new Error('watchToEndEnabled must be boolean');
+    }
+    const commentMode = input.commentMode ?? 'preset';
+    if (commentMode !== 'preset' && commentMode !== 'meta-ai') throw new Error('Invalid commentMode');
+    const commentNiche = optionalString(input.commentNiche, 'commentNiche')?.trim();
+    if (commentNiche && commentNiche.length > 160) throw new Error('commentNiche must be 160 characters or fewer');
     const commentText = optionalString(input.commentText, 'commentText');
-    if (commentText && commentText.length > 150) throw new Error('commentText must be 150 characters or fewer');
-    if (input.commentEnabled && !commentText?.trim()) {
+    const commentTextLimit = commentMode === 'meta-ai' ? 240 : 150;
+    if (commentText && commentText.length > commentTextLimit) {
+        throw new Error(`commentText must be ${commentTextLimit} characters or fewer`);
+    }
+    if (input.commentEnabled && commentMode === 'preset' && !commentText?.trim()) {
         throw new Error('commentText is required when commentEnabled is true');
     }
     const account = optionalString(input.account, 'account');
     return {
         durationMinutes, personality, likeEnabled: input.likeEnabled,
-        commentEnabled: input.commentEnabled,
+        commentEnabled: input.commentEnabled, commentMode,
+        watchToEndEnabled: input.watchToEndEnabled ?? true,
         ...(commentText ? { commentText } : {}),
+        ...(commentNiche ? { commentNiche } : {}),
         ...(account ? { account } : {}),
     };
 }
@@ -126,7 +144,10 @@ function createDoomscrollTask(configuration: InstagramPluginConfiguration): Task
                 DOOMSCROLL_DURATION_MINUTES: String(payload.durationMinutes),
                 DOOMSCROLL_PERSONALITY: payload.personality,
                 DOOMSCROLL_LIKE_ENABLED: String(payload.likeEnabled),
+                DOOMSCROLL_WATCH_TO_END_ENABLED: String(payload.watchToEndEnabled),
                 DOOMSCROLL_COMMENT_ENABLED: String(payload.commentEnabled),
+                DOOMSCROLL_COMMENT_MODE: payload.commentMode,
+                DOOMSCROLL_COMMENT_NICHE: payload.commentNiche ?? '',
                 ...(payload.commentText ? { DOOMSCROLL_COMMENT_TEXT: payload.commentText } : {}),
                 ...(payload.account ? { INSTAGRAM_SWITCH_ACCOUNT: payload.account } : {}),
             },
@@ -151,8 +172,51 @@ function createDoomscrollFollowingTask(configuration: InstagramPluginConfigurati
                 DOOMSCROLL_DURATION_MINUTES: String(payload.durationMinutes),
                 DOOMSCROLL_PERSONALITY: payload.personality,
                 DOOMSCROLL_LIKE_ENABLED: String(payload.likeEnabled),
+                DOOMSCROLL_WATCH_TO_END_ENABLED: String(payload.watchToEndEnabled),
                 DOOMSCROLL_COMMENT_ENABLED: String(payload.commentEnabled),
+                DOOMSCROLL_COMMENT_MODE: payload.commentMode,
+                DOOMSCROLL_COMMENT_NICHE: payload.commentNiche ?? '',
                 ...(payload.commentText ? { DOOMSCROLL_COMMENT_TEXT: payload.commentText } : {}),
+                ...(payload.account ? { INSTAGRAM_SWITCH_ACCOUNT: payload.account } : {}),
+            },
+        }),
+    };
+}
+
+function createTopicEngagementTask(configuration: InstagramPluginConfiguration): TaskDefinition<TopicEngagementPayload> {
+    return {
+        type: 'topic-engagement', version: 1, displayName: 'Instagram topic engagement',
+        validate(value) {
+            const input = objectPayload(value);
+            const searchTopic = optionalString(input.searchTopic, 'searchTopic')?.trim();
+            if (!searchTopic) throw new Error('searchTopic is required');
+            if (searchTopic.length > 100) throw new Error('searchTopic must be 100 characters or fewer');
+            const topicInput = { ...input };
+            delete topicInput.commentNiche;
+            const payload = validateDoomscrollPayload({ ...topicInput, commentEnabled: true,
+                commentMode: 'meta-ai' });
+            return { ...payload, searchTopic };
+        },
+        summarize: (payload) => `Topic engagement · ${payload.searchTopic} · ${payload.durationMinutes} min`,
+        estimateDurationMs: (payload) => payload.durationMinutes * 60_000,
+        retryPolicy: () => ({ retryLimit: 2, retryDelaySeconds: 60, retryBackoff: true }),
+        supportsStop: () => true,
+        execute: (context, payload) => context.runProcess({
+            entrypoint: configuration.topicEngagementEntrypoint ?? configuration.doomscrollEntrypoint
+                ?? fileURLToPath(new URL('./instagram/doomscroll.ts', import.meta.url)),
+            env: {
+                IOS_UDID: context.device.udid,
+                INSTAGRAM_BUNDLE_ID: configuration.bundleId ?? 'com.burbn.instagram',
+                DOOMSCROLL_DURATION_MINUTES: String(payload.durationMinutes),
+                DOOMSCROLL_PERSONALITY: payload.personality,
+                DOOMSCROLL_LIKE_ENABLED: String(payload.likeEnabled),
+                DOOMSCROLL_WATCH_TO_END_ENABLED: String(payload.watchToEndEnabled),
+                DOOMSCROLL_COMMENT_ENABLED: 'true',
+                DOOMSCROLL_COMMENT_EVERY_REEL: 'true',
+                DOOMSCROLL_COMMENT_MODE: 'meta-ai',
+                DOOMSCROLL_COMMENT_NICHE: '',
+                DOOMSCROLL_COMMENT_TEXT: payload.commentText ?? '',
+                DOOMSCROLL_SEARCH_TOPIC: payload.searchTopic,
                 ...(payload.account ? { INSTAGRAM_SWITCH_ACCOUNT: payload.account } : {}),
             },
         }),
@@ -316,6 +380,7 @@ export function createInstagramPlugin(configuration: InstagramPluginConfiguratio
         tasks: [
             createDoomscrollTask(configuration),
             createDoomscrollFollowingTask(configuration),
+            createTopicEngagementTask(configuration),
             createColdDmsTask(configuration),
             createPostTask(configuration),
         ],
@@ -350,6 +415,7 @@ export function createInstagramPlugin(configuration: InstagramPluginConfiguratio
                     const body = request.body;
                     const kind = body.scheduleKind ?? 'now';
                     const timing: ScheduleTiming = kind === 'now' ? { kind: 'now' }
+                        : kind === 'interval' ? { kind: 'interval', everyMinutes: Number(body.everyHours) * 60, startAt: body.runAt ?? '' }
                         : kind === 'once' ? { kind: 'once', runAt: body.runAt ?? '' }
                             : kind === 'daily' ? { kind: 'daily', localTime: body.localTime ?? '', timezone: body.timezone ?? 'UTC' }
                                 : { kind: 'weekly', localTime: body.localTime ?? '', timezone: body.timezone ?? 'UTC', weekdays: (body.weekdays ?? '').split(',').filter(Boolean).map(Number) };
@@ -375,13 +441,55 @@ export function createInstagramPlugin(configuration: InstagramPluginConfiguratio
                                 payload: {
                                     durationMinutes: Number(body.durationMinutes), personality: body.personality,
                                     likeEnabled: body.likeEnabled === 'on',
+                                    watchToEndEnabled: body.watchToEndConfigured === 'true' ? body.watchToEndEnabled === 'on' : true,
                                     commentEnabled: body.commentEnabled === 'on',
+                                    commentMode: body.commentMode ?? 'preset',
+                                    ...(body.commentNiche?.trim() ? { commentNiche: body.commentNiche.trim() } : {}),
                                     ...(body.commentText?.trim() ? { commentText: body.commentText.trim() } : {}),
                                     ...(body.account?.trim() ? { account: body.account.trim() } : {}),
                                 },
                             },
                             timing,
                             runWindowMinutes: body.runWindowMinutes ? Number(body.runWindowMinutes) : undefined,
+                        }, device.pluginData['com.git-agni.instagram'] ?? {});
+                        return reply.code(202).type('text/html').send(await context.renderActivity(device.udid));
+                    } catch (error) {
+                        const message = error instanceof Error ? error.message : String(error);
+                        return reply.code(409).type('text/html').send(await context.renderActivity(device.udid, message));
+                    }
+                },
+            );
+
+            context.app.post<{ Params: { udid: string }; Body: Record<string, string> }>(
+                '/api/devices/:udid/instagram/fragments/topic-engagement-run', async (request, reply) => {
+                    const device = await deviceData(request.params.udid);
+                    if (!device) return reply.code(404).send({ error: 'Device is not registered' });
+                    if (device.disabled) return reply.code(409).send({ error: 'This device is disconnected — reconnect it before scheduling automation' });
+                    const body = request.body;
+                    try {
+                        const recent = await context.scheduler.listExecutions(50, device.udid);
+                        if (recent.some(({ pluginId, taskType, status }) => pluginId === 'com.git-agni.instagram'
+                            && taskType === 'topic-engagement' && status === 'running')) {
+                            throw new Error('A topic engagement session is already running on this device. Stop it from Activity, then start again.');
+                        }
+                        await context.scheduler.clearDeviceQueue(device.udid, {
+                            pluginId: 'com.git-agni.instagram', taskType: 'topic-engagement', onlyQueued: true,
+                        });
+                        await context.scheduler.createTask({
+                            deviceUdid: device.udid,
+                            task: {
+                                pluginId: 'com.git-agni.instagram', taskType: 'topic-engagement', taskVersion: 1,
+                                payload: {
+                                    durationMinutes: Number(body.durationMinutes), personality: body.personality,
+                                    likeEnabled: body.likeEnabled === 'on',
+                                    watchToEndEnabled: body.watchToEndConfigured === 'true' ? body.watchToEndEnabled === 'on' : true,
+                                    commentEnabled: true, commentMode: 'meta-ai',
+                                    searchTopic: body.searchTopic?.trim() ?? '',
+                                    commentText: body.commentText?.trim() ?? '',
+                                    ...(body.account?.trim() ? { account: body.account.trim() } : {}),
+                                },
+                            },
+                            timing: { kind: 'now' },
                         }, device.pluginData['com.git-agni.instagram'] ?? {});
                         return reply.code(202).type('text/html').send(await context.renderActivity(device.udid));
                     } catch (error) {
@@ -399,6 +507,7 @@ export function createInstagramPlugin(configuration: InstagramPluginConfiguratio
                     const body = request.body;
                     const kind = body.scheduleKind ?? 'now';
                     const timing: ScheduleTiming = kind === 'now' ? { kind: 'now' }
+                        : kind === 'interval' ? { kind: 'interval', everyMinutes: Number(body.everyHours) * 60, startAt: body.runAt ?? '' }
                         : kind === 'once' ? { kind: 'once', runAt: body.runAt ?? '' }
                             : kind === 'daily' ? { kind: 'daily', localTime: body.localTime ?? '', timezone: body.timezone ?? 'UTC' }
                                 : { kind: 'weekly', localTime: body.localTime ?? '', timezone: body.timezone ?? 'UTC', weekdays: (body.weekdays ?? '').split(',').filter(Boolean).map(Number) };
@@ -424,7 +533,10 @@ export function createInstagramPlugin(configuration: InstagramPluginConfiguratio
                                 payload: {
                                     durationMinutes: Number(body.durationMinutes), personality: body.personality,
                                     likeEnabled: body.likeEnabled === 'on',
+                                    watchToEndEnabled: body.watchToEndConfigured === 'true' ? body.watchToEndEnabled === 'on' : true,
                                     commentEnabled: body.commentEnabled === 'on',
+                                    commentMode: body.commentMode ?? 'preset',
+                                    ...(body.commentNiche?.trim() ? { commentNiche: body.commentNiche.trim() } : {}),
                                     ...(body.commentText?.trim() ? { commentText: body.commentText.trim() } : {}),
                                     ...(body.account?.trim() ? { account: body.account.trim() } : {}),
                                 },

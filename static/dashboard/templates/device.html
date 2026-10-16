@@ -160,6 +160,10 @@
                                 <span class="workflow-tile-title">Warmup</span>
                                 <span class="workflow-tile-desc">Reels · age the account</span>
                             </button>
+                            <button id="open-instagram-topic-engagement" class="workflow-tile" type="button">
+                                <span class="workflow-tile-title">Topic engagement</span>
+                                <span class="workflow-tile-desc">Search topic · Reels · contextual comments</span>
+                            </button>
                             <button id="open-instagram-following-doomscroll" class="workflow-tile" type="button">
                                 <span class="workflow-tile-title">Engage following</span>
                                 <span class="workflow-tile-desc">Reels Friends · soft recovery</span>
@@ -516,11 +520,13 @@
             </div>
             <p>Opens the Reels tab (For You), then identify → like/comment → scroll. Soft-retaps Reels if the session drifts to Home. Save is not used — Reels has no reliable bookmark control.</p>
             <label for="instagram-doomscroll-duration">Duration (minutes)</label>
-            <input id="instagram-doomscroll-duration" name="durationMinutes" type="number" min="1" max="180" value="5" required>
+            <input id="instagram-doomscroll-duration" name="durationMinutes" type="number" min="1" max="360" value="15" required>
             <div class="duration-shortcuts">
-                <button type="button" data-instagram-doomscroll-duration="1">1 min</button>
-                <button type="button" data-instagram-doomscroll-duration="5">5 min</button>
                 <button type="button" data-instagram-doomscroll-duration="15">15 min</button>
+                <button type="button" data-instagram-doomscroll-duration="30">30 min</button>
+                <button type="button" data-instagram-doomscroll-duration="60">1 hour</button>
+                <button type="button" data-instagram-doomscroll-duration="180">3 hours</button>
+                <button type="button" data-instagram-doomscroll-duration="360">6 hours</button>
             </div>
             <label for="instagram-doomscroll-personality">Personality</label>
             <select id="instagram-doomscroll-personality" name="personality">
@@ -537,20 +543,33 @@
                 <label><input type="checkbox" name="likeEnabled" checked> Like reels</label>
                 <label><input id="instagram-comment-enabled" type="checkbox" name="commentEnabled"> Comment</label>
             </div></fieldset>
-            <label for="instagram-comment-text">Comment text</label>
-            <input id="instagram-comment-text" name="commentText" type="text" maxlength="150" placeholder="Nice one 🔥" disabled>
-            <p class="hint">Set the comment before starting — automation pastes this preset text.</p>
+            <input name="watchToEndConfigured" type="hidden" value="true">
+            <label class="checkbox-option"><input name="watchToEndEnabled" type="checkbox" checked> Watch some reels to the end</label>
+            <p class="hint">Uses playback progress when available, with a maximum wait of 90 seconds per reel.</p>
+            <label for="instagram-comment-mode">Comment style</label>
+            <select id="instagram-comment-mode" name="commentMode">
+                <option value="meta-ai">Related to the reel (Meta AI)</option>
+                <option value="preset">Preset text</option>
+            </select>
+            <p class="hint">Uses “About this reel” and the creator’s caption to draft a fresh comment. Skips reels without a readable summary.</p>
+            <label for="instagram-comment-niche">Topics to find (optional)</label>
+            <input id="instagram-comment-niche" name="commentNiche" type="text" maxlength="160" placeholder="baby, sleep training, baby sleep tips">
+            <p class="hint">Separate topics with commas. Meta AI checks each Reel’s main subject and skips unrelated or unclear content. Leave blank to consider every Reel.</p>
+            <label for="instagram-comment-text">Your experience, advice, or preset comment (optional for Meta AI)</label>
+            <input id="instagram-comment-text" name="commentText" type="text" maxlength="240" placeholder="Dreamer helped us spot our baby's sleep patterns..." disabled>
+            <p class="hint">In Meta AI mode, this is source material: relevant facts are rewritten to fit the Reel, and personal claims are never invented. Preset mode posts the text exactly.</p>
             <label class="checkbox-option"><input id="instagram-doomscroll-recurring" type="checkbox"> Recurring</label>
             <div id="instagram-doomscroll-start-options" class="field">
                 <label for="instagram-doomscroll-start-kind">Start</label>
                 <select id="instagram-doomscroll-start-kind"><option value="now">Now</option><option value="once">Once</option></select>
             </div>
             <div id="instagram-doomscroll-once-fields" class="schedule-fields" hidden>
-                <div class="field"><label for="instagram-doomscroll-run-at">One-time date and time</label><input id="instagram-doomscroll-run-at" type="datetime-local"></div>
+                <div class="field"><label for="instagram-doomscroll-run-at">Start date and time</label><input id="instagram-doomscroll-run-at" type="datetime-local"></div>
             </div>
             <div id="instagram-doomscroll-recurring-fields" class="schedule-fields" hidden>
-                <div class="field"><label for="instagram-doomscroll-frequency">Repeat</label><select id="instagram-doomscroll-frequency"><option value="daily">Daily</option><option value="weekly">Weekly</option></select></div>
-                <div class="field"><label for="instagram-doomscroll-local-time">Time</label><input id="instagram-doomscroll-local-time" name="localTime" type="time" value="09:00"></div>
+                <div class="field"><label for="instagram-doomscroll-frequency">Repeat</label><select id="instagram-doomscroll-frequency"><option value="interval">Every X hours</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select></div>
+                <div id="instagram-doomscroll-interval-fields" class="field" hidden><label for="instagram-doomscroll-every-hours">Every (hours)</label><input id="instagram-doomscroll-every-hours" name="everyHours" type="number" min="1" max="720" step="1" value="6" disabled><p class="hint">First run at the start date and time above, then every X hours. Dates use your local time zone. A past start date uses the next matching interval.</p></div>
+                <div id="instagram-doomscroll-local-time-field" class="field"><label for="instagram-doomscroll-local-time">Time</label><input id="instagram-doomscroll-local-time" name="localTime" type="time" value="09:00"></div>
                 <fieldset id="instagram-doomscroll-weekday-fields" class="weekday-field" hidden><legend>Days</legend><div class="weekday-options">
                     <label><input type="checkbox" value="1" checked><span>Mon</span></label><label><input type="checkbox" value="2" checked><span>Tue</span></label>
                     <label><input type="checkbox" value="3" checked><span>Wed</span></label><label><input type="checkbox" value="4" checked><span>Thu</span></label>
@@ -569,6 +588,51 @@
             </div>
         </form>
     </dialog>
+    <dialog id="instagram-topic-engagement-dialog">
+        <form id="instagram-topic-engagement-form" class="modal" hx-post="/api/devices/__DEVICE_UDID__/instagram/fragments/topic-engagement-run"
+            hx-target="#device-activity" hx-swap="outerHTML" hx-disabled-elt="button[type=submit]">
+            <div class="modal-head">
+                <div><span class="eyebrow">Instagram</span><h2>Topic engagement</h2></div>
+                <button id="close-instagram-topic-engagement" class="icon-button" type="button">Close</button>
+            </div>
+            <p>Searches Instagram for one topic, opens its Reels results, then attempts a Reel-specific comment on every non-sponsored Reel.</p>
+            <label for="instagram-topic-engagement-topic">Search topic</label>
+            <input id="instagram-topic-engagement-topic" name="searchTopic" type="text" maxlength="100" required placeholder="baby sleep training">
+            <label for="instagram-topic-engagement-text">Your real experience or advice (optional)</label>
+            <textarea id="instagram-topic-engagement-text" name="commentText" rows="3" maxlength="240" placeholder="Dreamer helped us spot our baby's sleep patterns..."></textarea>
+            <p class="hint">When provided, Meta AI ties relevant facts from this text to each Reel and never invents personal claims. Leave blank for a comment based only on the Reel.</p>
+            <label for="instagram-topic-engagement-duration">Run for (minutes)</label>
+            <input id="instagram-topic-engagement-duration" name="durationMinutes" type="number" min="1" max="360" value="15" required>
+            <div class="duration-shortcuts">
+                <button type="button" data-instagram-topic-engagement-duration="15">15 min</button>
+                <button type="button" data-instagram-topic-engagement-duration="30">30 min</button>
+                <button type="button" data-instagram-topic-engagement-duration="60">1 hour</button>
+                <button type="button" data-instagram-topic-engagement-duration="180">3 hours</button>
+                <button type="button" data-instagram-topic-engagement-duration="360">6 hours</button>
+            </div>
+            <label for="instagram-topic-engagement-personality">Personality</label>
+            <select id="instagram-topic-engagement-personality" name="personality">
+                <option value="skimmer">Skimmer</option>
+                <option value="casual">Casual</option>
+                <option value="engaged" selected>Engaged</option>
+                <option value="dialed">DIALED</option>
+            </select>
+            <p class="hint">Personality controls watching and likes. Topic engagement attempts comments on every Reel.</p>
+            <label for="instagram-topic-engagement-account">Instagram account</label>
+            <select id="instagram-topic-engagement-account" name="account">
+                <option value="">Don't switch</option>__INSTAGRAM_ACCOUNT_OPTIONS__
+            </select>
+            <input name="watchToEndConfigured" type="hidden" value="true">
+            <label class="checkbox-option"><input name="watchToEndEnabled" type="checkbox" checked> Watch some Reels to the end</label>
+            <label class="checkbox-option"><input name="likeEnabled" type="checkbox" checked> Like Reels</label>
+            <div class="form-actions">
+                <span id="instagram-topic-engagement-result" class="run-meta" aria-live="polite"></span>
+                <span class="spacer"></span>
+                <button id="cancel-instagram-topic-engagement" class="button secondary" type="button">Cancel</button>
+                <button class="button primary" type="submit">Start topic engagement</button>
+            </div>
+        </form>
+    </dialog>
     <dialog id="instagram-following-doomscroll-dialog">
         <form id="instagram-following-doomscroll-form" class="modal" hx-post="/api/devices/__DEVICE_UDID__/instagram/fragments/following-scroll-run"
             hx-target="#device-activity" hx-swap="outerHTML" hx-disabled-elt="button">
@@ -578,11 +642,13 @@
             </div>
             <p>Opens Reels, then Friends, then like/comment → scroll while verifying the Friends header.</p>
             <label for="instagram-following-doomscroll-duration">Duration (minutes)</label>
-            <input id="instagram-following-doomscroll-duration" name="durationMinutes" type="number" min="1" max="180" value="5" required>
+            <input id="instagram-following-doomscroll-duration" name="durationMinutes" type="number" min="1" max="360" value="15" required>
             <div class="duration-shortcuts">
-                <button type="button" data-instagram-following-doomscroll-duration="1">1 min</button>
-                <button type="button" data-instagram-following-doomscroll-duration="5">5 min</button>
                 <button type="button" data-instagram-following-doomscroll-duration="15">15 min</button>
+                <button type="button" data-instagram-following-doomscroll-duration="30">30 min</button>
+                <button type="button" data-instagram-following-doomscroll-duration="60">1 hour</button>
+                <button type="button" data-instagram-following-doomscroll-duration="180">3 hours</button>
+                <button type="button" data-instagram-following-doomscroll-duration="360">6 hours</button>
             </div>
             <label for="instagram-following-doomscroll-personality">Personality</label>
             <select id="instagram-following-doomscroll-personality" name="personality">
@@ -599,9 +665,21 @@
                 <label><input type="checkbox" name="likeEnabled" checked> Like reels</label>
                 <label><input id="instagram-following-comment-enabled" type="checkbox" name="commentEnabled"> Comment</label>
             </div></fieldset>
-            <label for="instagram-following-comment-text">Comment text</label>
-            <input id="instagram-following-comment-text" name="commentText" type="text" maxlength="150" placeholder="Nice one 🔥" disabled>
-            <p class="hint">Set the comment before starting — automation pastes this preset text.</p>
+            <input name="watchToEndConfigured" type="hidden" value="true">
+            <label class="checkbox-option"><input name="watchToEndEnabled" type="checkbox" checked> Watch some reels to the end</label>
+            <p class="hint">Uses playback progress when available, with a maximum wait of 90 seconds per reel.</p>
+            <label for="instagram-following-comment-mode">Comment style</label>
+            <select id="instagram-following-comment-mode" name="commentMode">
+                <option value="meta-ai">Related to the reel (Meta AI)</option>
+                <option value="preset">Preset text</option>
+            </select>
+            <p class="hint">Uses “About this reel” and the creator’s caption to draft a fresh comment. Skips reels without a readable summary.</p>
+            <label for="instagram-following-comment-niche">Topics to find (optional)</label>
+            <input id="instagram-following-comment-niche" name="commentNiche" type="text" maxlength="160" placeholder="baby, sleep training, baby sleep tips">
+            <p class="hint">Separate topics with commas. Meta AI checks each Reel’s main subject and skips unrelated or unclear content. Leave blank to consider every Reel.</p>
+            <label for="instagram-following-comment-text">Your experience, advice, or preset comment (optional for Meta AI)</label>
+            <input id="instagram-following-comment-text" name="commentText" type="text" maxlength="240" placeholder="Dreamer helped us spot our baby's sleep patterns..." disabled>
+            <p class="hint">In Meta AI mode, this is source material: relevant facts are rewritten to fit the Reel, and personal claims are never invented. Preset mode posts the text exactly.</p>
             <input name="scheduleKind" type="hidden" value="now">
             <input class="browser-timezone" name="timezone" type="hidden">
             <div class="form-actions">

@@ -1,5 +1,9 @@
 # Getting started
 
+Moving an existing installation to another Mac? Follow the
+[Mac mini migration checklist](mac-mini-migration.md) to transfer private state,
+restore schedules and uploads, and complete setup before restarting automation.
+
 Phone Farm iOS drives physical iPhones from a local dashboard: guided device
 registration, a live screen with remote tap/swipe, and a PostgreSQL‑backed
 scheduler that runs versioned automation tasks (TikTok and Instagram plugins
@@ -133,6 +137,54 @@ device, and step through the checks. Unlock the phone when WDA first launches.
 From a device page you can run the built‑in TikTok and Instagram tasks
 (`doomscroll`, `post`) now or on a `daily`/`weekly`/`once` schedule. Watch
 progress in **Activity**; full logs are under `GET /api/executions/:id`.
+
+Instagram warmup and engage-following enable **Watch some reels to the end**
+by default. The skimmer, casual, engaged, and dialed profiles attempt this on
+15%, 35%, 65%, and 35% of reels, respectively. They observe the accessible
+playback progress resetting after the end, with a 90-second maximum per reel.
+Missing progress uses the profile's regular timed watch; stalled progress stops
+the completion wait after 12 seconds. Stop and the session deadline also end
+the wait. Uncheck the option to use regular timed watching throughout.
+API payloads can set `watchToEndEnabled: false`; omitted values default to true.
+
+To repeat Instagram warmup every few hours, enable **Recurring**, choose
+**Every X hours**, enter the interval and **Start date and time**, then submit.
+The first run starts at that date, followed by fixed elapsed-hour intervals.
+Dates use your browser's local time zone. If the start is in the past, the next
+aligned interval is used; resuming a paused schedule preserves that alignment.
+Missed intervals are skipped rather than replayed as a backlog. Intervals can be
+1–720 hours. The API timing is `{ "kind": "interval", "everyMinutes": 360,
+"startAt": "2026-10-03T13:00:00Z" }` for a six-hour interval.
+
+With **Comment** enabled, the Instagram forms default to **Related to the reel
+(Meta AI)**. The workflow opens the two-line icon below Share, reads **About
+this reel**, and asks Meta AI for a short comment grounded in that summary and
+the creator's caption plus the configured experience/advice. Meta AI is told
+to use that text as the only source for personal claims. It returns to the same reel before posting. Missing
+summaries, incomplete input, invalid responses, repeated comments within the
+run, and insufficient session time cause the comment to be skipped. Drafting
+can take up to two minutes and respects Stop and the session deadline. No
+separate AI API key is needed. Choose **Preset text** to retain the old behavior.
+API payloads use `commentMode: "meta-ai"`; omitted modes retain `"preset"`
+for existing schedules. Preset mode requires `commentText`; Meta AI mode uses it
+as optional experience/advice and otherwise comments from the Reel alone.
+
+Set **Topics to find** to a comma-separated niche such as
+`baby, sleep training, baby sleep tips`. Meta AI checks whether the reel's main
+subject clearly fits any listed topic before generating or submitting a comment.
+Unrelated reels, uncertain classifications, and unavailable summaries are skipped.
+This filter applies to both related comments and preset text in warmup and
+engage-following; watching and liking continue as configured. Leave the field
+blank to allow any topic. Scheduled tasks retain their chosen niche. API payloads
+use the optional `commentNiche` string (maximum 160 characters); direct scripts
+use `DOOMSCROLL_COMMENT_NICHE`.
+
+For an actual Instagram search rather than filtering the recommended feed, open
+**Instagram → Topic engagement**. Enter one search query and your real experience
+or advice. The task opens Search, submits the query, selects the Reels results,
+and scrolls them for the chosen 15-minute to 6-hour duration. Each result is
+checked again with Meta AI before a contextual comment is posted. The task type
+is `topic-engagement`; direct runs receive the query as `DOOMSCROLL_SEARCH_TOPIC`.
 
 ## Authentication
 

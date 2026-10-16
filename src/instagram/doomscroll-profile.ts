@@ -3,6 +3,7 @@ export type Personality = 'skimmer' | 'casual' | 'engaged' | 'dialed';
 export interface ProfileConfig {
     watchMinMs: number;
     watchMaxMs: number;
+    watchCompletionChance: number;
     likeChance: number;
     saveChance: number;
     commentChance: number;
@@ -14,21 +15,25 @@ export interface ProfileConfig {
 export const PROFILES: Record<Personality, ProfileConfig> = {
     skimmer: {
         watchMinMs: 1500, watchMaxMs: 4000,
+        watchCompletionChance: 0.15,
         likeChance: 0.28, saveChance: 0.10, commentChance: 0.15,
         lingerChance: 0.05, lingerMinMs: 4000, lingerMaxMs: 8000,
     },
     casual: {
         watchMinMs: 4000, watchMaxMs: 9000,
+        watchCompletionChance: 0.35,
         likeChance: 0.50, saveChance: 0.22, commentChance: 0.28,
         lingerChance: 0.10, lingerMinMs: 8000, lingerMaxMs: 15000,
     },
     engaged: {
         watchMinMs: 8000, watchMaxMs: 18000,
+        watchCompletionChance: 0.65,
         likeChance: 0.75, saveChance: 0.40, commentChance: 0.41,
         lingerChance: 0.20, lingerMinMs: 15000, lingerMaxMs: 30000,
     },
     dialed: {
         watchMinMs: 1200, watchMaxMs: 2200,
+        watchCompletionChance: 0.35,
         likeChance: 1, saveChance: 1, commentChance: 1,
         lingerChance: 0, lingerMinMs: 0, lingerMaxMs: 0,
     },
@@ -44,6 +49,10 @@ function between(min: number, max: number, random: () => number): number {
 
 export function pickWatchDurationMs(profile: ProfileConfig, random: () => number = Math.random): number {
     return between(profile.watchMinMs, profile.watchMaxMs, random);
+}
+
+export function decideWatchToCompletion(profile: ProfileConfig, random: () => number = Math.random): boolean {
+    return random() < profile.watchCompletionChance;
 }
 
 export interface LingerDecision {

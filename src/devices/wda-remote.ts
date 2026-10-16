@@ -194,28 +194,57 @@ export class WdaRemoteControl {
         if (!this.passcode) {
             throw new RemoteDeviceError('IOS_PASSCODE is not configured; cannot unlock the device');
         }
-        // WDA's /wda/unlock presses Home twice, which wakes the screen and
-        // surfaces the passcode keypad, but it then waits for the screen to
-        // report unlocked and errors out because a passcode is still required.
-        // That's expected here — the keypad is up, so ignore the error and
-        // move on to entering the passcode.
+        let sessionId: string | undefined;
         try {
-            await this.request('/wda/unlock', { method: 'POST' });
-        } catch {
-            // ignore — see comment above
-        }
-        for (const character of this.passcode) {
-            const digit = Number(character);
-            if (!Number.isInteger(digit) || digit < 0 || digit > 9) {
-                throw new RemoteDeviceError('IOS_PASSCODE must contain only digits');
+            const { screenSize } = await this.getScreenInfo(udid);
+            // Supported Home-button iPhones have 16:9 screens; Face ID profiles
+            // have taller displays and need a swipe to reveal the passcode keypad.
+            if (screenSize.height / screenSize.width < 2) {
+                try {
+                    await this.request('/wda/unlock', { method: 'POST' });
+                } catch {
+                    // WDA presses Home twice, then times out waiting for the
+                    // passcode we enter below. The keypad is already visible.
+                }
+            } else {
+                await this.request('/wda/pressButton', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ name: 'home' }),
+                });
+                const session = await this.request('/session', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ capabilities: { alwaysMatch: {} } }),
+                }).then((response) => response.json()) as WdaPayload<{ sessionId?: string }> & { sessionId?: string };
+                sessionId = session.sessionId ?? session.value.sessionId;
+                if (!sessionId) throw new RemoteDeviceError('WebDriverAgent did not create an unlock session');
+                await this.request(`/session/${sessionId}/wda/dragfromtoforduration`, {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({
+                        fromX: Math.round(screenSize.width / 2), fromY: screenSize.height - 26,
+                        toX: Math.round(screenSize.width / 2), toY: Math.round(screenSize.height / 4),
+                        duration: 0.5,
+                    }),
+                });
+                await new Promise((resolve) => setTimeout(resolve, 200));
             }
-            const { x, y } = passcodeDigitPoint(digit, this.passcodeKeypadLayout);
-            await this.request('/wda/absolute-actions', {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ actions: tapActions({ type: 'tap', x, y }) }),
-            });
-            await new Promise((resolve) => setTimeout(resolve, 250));
+            for (const character of this.passcode) {
+                const digit = Number(character);
+                if (!Number.isInteger(digit) || digit < 0 || digit > 9) {
+                    throw new RemoteDeviceError('IOS_PASSCODE must contain only digits');
+                }
+                const { x, y } = passcodeDigitPoint(digit, this.passcodeKeypadLayout);
+                await this.request('/wda/absolute-actions', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ actions: tapActions({ type: 'tap', x, y }) }),
+                });
+                await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+        } finally {
+            if (sessionId) await this.request(`/session/${sessionId}`, { method: 'DELETE' }).catch(() => undefined);
         }
         if (await this.isLocked(udid)) {
             throw new RemoteDeviceError('Device is still locked after entering the passcode');

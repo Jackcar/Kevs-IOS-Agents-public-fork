@@ -1072,6 +1072,7 @@ dialog#calibrate-dialog { width: min(760px, calc(100% - 28px)); }
     white-space: pre-wrap;
 }
 .schedule-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0 14px; }
+.schedule-fields[hidden] { display: none; }
 .schedule-fields .field label { margin: 0 0 6px; }
 .checkbox-option { display: flex; align-items: center; gap: 8px; width: fit-content; }
 .checkbox-option input { width: auto; }

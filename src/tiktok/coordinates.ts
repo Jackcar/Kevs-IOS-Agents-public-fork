@@ -13,6 +13,70 @@ export interface TikTokCoordinates {
 }
 
 export const DEVICE_COORDINATES = {
+    // ponytail: scaled seed; calibrate workflow targets on the physical device.
+    iphone16promax: {
+        passcodeKeypad: {
+            columnX: [108, 220, 332],
+            rowY: [375, 485, 594, 705]
+        },
+        tiktok: {
+            profileTab: { x: 396, y: 941 },
+            homeTab: { x: 45, y: 937 },
+            accountSwitcher: { x: 217, y: 227 },
+            create: { x: 225, y: 894 },
+            postContent: { x: 219, y: 918 },
+            upload: { x: 60, y: 842 },
+            selectMultiple: { x: 29, y: 886 },
+            useLayout: { x: 29, y: 702 },
+            picker: { circleX: 73, columnStep: 147, firstY: 251, trayY: 516, rowStep: 148, cellX: 73, cellStep: 146, cellY: 251 },
+            pickerNext: { x: 325, y: 884 },
+            editorNext: { x: 325, y: 913 },
+            caption: { x: 141, y: 338 },
+            keyboardBack: { x: 27, y: 61 },
+            draft: { x: 115, y: 904 },
+            finish: { x: 325, y: 904 },
+            like: { x: 407, y: 497 },
+            save: { x: 407, y: 629 },
+            followingTab: { x: 178, y: 96 },
+            comment: { x: 405, y: 604 },
+            commentComposer: { x: 164, y: 888 },
+            commentSend: { x: 398, y: 888 },
+            liveClose: { x: 422, y: 68 },
+            swipe: { x: 142, startY: 789, endY: 215, durationMs: 380 }
+        }
+    },
+    // Seeded from the iPhone 17 Pro layout; calibrate workflow targets on-device.
+    iphone14promax: {
+        passcodeKeypad: {
+            columnX: [118,219,316],
+            rowY: [307,485,594,707],
+        },
+        tiktok: {
+            profileTab: { x: 387, y: 917 },
+            homeTab: { x: 44, y: 913 },
+            accountSwitcher: { x: 212, y: 221 },
+            create: { x: 220, y: 872 },
+            postContent: { x: 214, y: 895 },
+            upload: { x: 59, y: 821 },
+            selectMultiple: { x: 28, y: 864 },
+            useLayout: { x: 28, y: 684 },
+            picker: { circleX: 71, columnStep: 144, firstY: 245, trayY: 503, rowStep: 144, cellX: 71, cellStep: 143, cellY: 245 },
+            pickerNext: { x: 318, y: 862 },
+            editorNext: { x: 318, y: 890 },
+            caption: { x: 138, y: 330 },
+            keyboardBack: { x: 26, y: 59 },
+            draft: { x: 112, y: 881 },
+            finish: { x: 318, y: 881 },
+            like: { x: 398, y: 485 },
+            save: { x: 398, y: 613 },
+            followingTab: { x: 174, y: 94 },
+            comment: { x: 396, y: 589 },
+            commentComposer: { x: 160, y: 866 },
+            commentSend: { x: 389, y: 866 },
+            liveClose: { x: 412, y: 66 },
+            swipe: { x: 139, startY: 769, endY: 210, durationMs: 380 },
+        },
+    },
     iphone8: {
         passcodeKeypad: { columnX: [103, 191, 275], rowY: [220, 347, 425, 506] },
         tiktok: {

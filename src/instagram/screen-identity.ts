@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 
 import { detectEngagementControls, type EngagementSeeds } from './engagement-controls.js';
+import { recognizeWords } from './ocr.js';
 
 export type InstagramScreenKind = 'reels' | 'following' | 'home' | 'comments' | 'search' | 'off_feed';
 
@@ -246,8 +247,36 @@ export async function identifyInstagramScreen(
     const { data, info } = await sharp(screenshot).raw().ensureAlpha().toBuffer({ resolveWithObject: true });
     const image: PixelImage = { data, width: info.width, height: info.height, channels: info.channels };
 
-    if (looksLikeSearchPage(image)) {
+    // Brightness alone calls the white Home header (and bright videos) Search.
+    // Read only the app chrome: full-frame OCR often misses Reels/Friends.
+    const headerWords = await recognizeWords(await sharp(screenshot).extract({
+        left: Math.floor(info.width * 0.18), top: Math.floor(info.height * 0.055),
+        width: Math.floor(info.width * 0.57),
+        height: Math.ceil(info.height * 0.09),
+    }).png().toBuffer());
+    const headerText = headerWords.map((word) => word.text.toLowerCase()).join(' ');
+    const composerWords = await recognizeWords(await sharp(screenshot).extract({
+        left: Math.floor(info.width * 0.15), top: Math.floor(info.height * 0.56),
+        width: Math.floor(info.width * 0.72), height: Math.floor(info.height * 0.40),
+    }).png().toBuffer());
+    const composerText = composerWords.map((word) => word.text.toLowerCase()).join(' ');
+    if (/what do you think of this|add a comment/.test(composerText)) {
+        return { kind: 'comments', confidence: 0.9, reasons: ['commentComposer'] };
+    }
+    const hasReelsHeader = /\breels\b/.test(headerText) && /\bfriends\b/.test(headerText);
+    if (hasReelsHeader) {
+        return homeKindFromTab(detectReelsTopTab(image) === 'friends' ? 'following' : 'forYou',
+            0.9, ['reelsHeaderText']);
+    }
+    const searchWords = await recognizeWords(await sharp(screenshot).extract({
+        left: 0, top: Math.floor(info.height * 0.055), width: info.width,
+        height: Math.ceil(info.height * 0.09),
+    }).png().toBuffer());
+    if (searchWords.some((word) => word.text.toLowerCase() === 'search')) {
         return { kind: 'search', confidence: 0.85, reasons: ['searchQueryField'] };
+    }
+    if (looksLikeSearchPage(image) && looksLikeInstagramTabBar(image)) {
+        return { kind: 'home', confidence: 0.7, reasons: ['lightHeaderWithoutSearchField'] };
     }
     if (looksLikeCommentSheet(image)) {
         return { kind: 'comments', confidence: 0.8, reasons: ['lightCommentSheet'] };

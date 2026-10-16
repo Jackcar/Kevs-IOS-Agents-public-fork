@@ -1,12 +1,14 @@
 --- .appium2/node_modules/appium-xcuitest-driver/node_modules/appium-webdriveragent/WebDriverAgentLib/Commands/FBTouchActionCommands.m
 +++ .appium2/node_modules/appium-xcuitest-driver/node_modules/appium-webdriveragent/WebDriverAgentLib/Commands/FBTouchActionCommands.m
-@@ -14,0 +15 @@
+@@ -13,7 +13,160 @@
+ #import "FBRouteRequest.h"
+ #import "FBSession.h"
+ #import "XCUIApplication+FBTouchAction.h"
 +#import "FBXCTestDaemonsProxy.h"
-@@ -15,0 +17,3 @@
 +#import "XCPointerEventPath.h"
 +#import "XCSynthesizedEventRecord.h"
 +@import Photos;
-@@ -16,0 +21,139 @@
+ 
 +static BOOL FBWaitForPhotoLibraryAuthorization(NSError **error)
 +{
 +  __block PHAuthorizationStatus status = [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly];
@@ -64,7 +66,6 @@
 +      // camera/screen recordings and automation picks the wrong cell.
 +      PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
 +      request.creationDate = [NSDate date];
-+      request.modificationDate = [NSDate date];
 +      [request addResourceWithType:PHAssetResourceTypeVideo fileURL:fileURL options:nil];
 +      identifier = request.placeholderForCreatedAsset.localIdentifier;
 +    } else {
@@ -156,10 +157,22 @@
 +  return [FBXCTestDaemonsProxy synthesizeEventWithRecord:record error:error];
 +}
 +
-@@ -24,0 +168,2 @@
++
+ @implementation FBTouchActionCommands
+ 
+ #pragma mark - <FBCommandHandler>
+@@ -22,17 +175,37 @@
+ {
+   return
+   @[
 +    [[FBRoute POST:@"/wda/absolute-actions"].withoutSession respondWithTarget:self action:@selector(handlePerformW3CTouchActions:)],
 +    [[FBRoute POST:@"/wda/import-media"].withoutSession respondWithTarget:self action:@selector(handleImportMedia:)],
-@@ -30,0 +176,11 @@
+     [[FBRoute POST:@"/actions"] respondWithTarget:self action:@selector(handlePerformW3CTouchActions:)],
+   ];
+ }
+ 
+ #pragma mark - Commands
+ 
 ++ (id<FBResponsePayload>)handleImportMedia:(FBRouteRequest *)request
 +{
 +  NSError *error;
@@ -171,20 +184,29 @@
 +  return FBResponseWithObject(@{ @"localIdentifier": identifier, @"assetCount": @(assetCount) });
 +}
 +
-@@ -33 +188,0 @@
+ + (id<FBResponsePayload>)handlePerformW3CTouchActions:(FBRouteRequest *)request
+ {
 -  XCUIApplication *application = request.session.activeApplication;
-@@ -35,0 +191,9 @@
+   NSArray *actions = (NSArray *)request.arguments[@"actions"];
+   NSError *error;
++
 +  if (FBIsAbsoluteSingleTouchAction(actions)) {
 +    if (!FBPerformAbsoluteSingleTouchAction(actions, &error)) {
-+      return FBResponseWithUnknownError(error ?: [NSError errorWithDomain:@"com.facebook.WebDriverAgent"
-+                                                                      code:1
-+                                                                  userInfo:@{NSLocalizedDescriptionKey: @"Unable to synthesize the absolute touch action"}]);
++      return FBResponseWithUnknownError(error);
 +    }
 +    return FBResponseWithOK();
 +  }
 +  XCUIApplication *application = request.session.activeApplication;
+   if (![application fb_performW3CActions:actions elementCache:request.session.elementCache error:&error]) {
+     return FBResponseWithUnknownError(error);
+   }
 --- .appium2/node_modules/appium-xcuitest-driver/node_modules/appium-webdriveragent/WebDriverAgentRunner/Info.plist
 +++ .appium2/node_modules/appium-xcuitest-driver/node_modules/appium-webdriveragent/WebDriverAgentRunner/Info.plist
-@@ -28,0 +29,2 @@
+@@ -26,5 +26,7 @@
+ 	<string></string>
+ 	<key>NSLocationWhenInUseUsageDescription</key>
+ 	<string></string>
 +	<key>NSPhotoLibraryAddUsageDescription</key>
 +	<string>Allow automation uploads to be added to the device photo library.</string>
+ </dict>
+ </plist>

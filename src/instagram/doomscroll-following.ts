@@ -2,15 +2,19 @@ import { remote, type Browser } from 'webdriverio';
 
 import { loadRegisteredDevices, resolveDeviceCoordinates, WdaRemoteControl } from '@git-agni/phone-farm-core';
 import { coordinateProfile, registeredAccounts } from './runtime-settings.js';
-import { switchInstagramAccount, tapCoordinate, typeText } from './actions.js';
+import { switchInstagramAccount, tapCoordinate } from './actions.js';
 import { detectEngagementControls } from './engagement-controls.js';
 import { identifyInstagramScreen } from './screen-identity.js';
+import { browseReelComments } from './comment-browse.js';
+import { readReelProgress, watchReelToCompletion } from './reel-watch.js';
+import { draftContextualComment, readReelAdMarker, submitReelComment } from './reel-context.js';
 import {
     PROFILES,
     clampToDeadline,
     decideComment,
     decideLike,
     decideLinger,
+    decideWatchToCompletion,
     hasTimeRemaining,
     isPersonality,
     pickWatchDurationMs,
@@ -54,11 +58,17 @@ if (!isPersonality(personalityRaw)) {
 const personality = personalityRaw;
 const profile = PROFILES[personality];
 
-const durationMinutes = boundedInteger('DOOMSCROLL_DURATION_MINUTES', 5, 1, 180);
+const durationMinutes = boundedInteger('DOOMSCROLL_DURATION_MINUTES', 15, 1, 360);
 const likeEnabled = booleanEnv('DOOMSCROLL_LIKE_ENABLED', true);
+const watchToEndEnabled = booleanEnv('DOOMSCROLL_WATCH_TO_END_ENABLED', true);
 const commentEnabled = booleanEnv('DOOMSCROLL_COMMENT_ENABLED', false);
 const commentText = (process.env.DOOMSCROLL_COMMENT_TEXT ?? '').trim();
-if (commentEnabled && !commentText) {
+const commentMode = process.env.DOOMSCROLL_COMMENT_MODE ?? 'preset';
+if (commentMode !== 'preset' && commentMode !== 'meta-ai') throw new Error('Invalid DOOMSCROLL_COMMENT_MODE');
+const commentNiche = (process.env.DOOMSCROLL_COMMENT_NICHE ?? '').trim();
+if (commentNiche.length > 160) throw new Error('DOOMSCROLL_COMMENT_NICHE must be 160 characters or fewer');
+const recentComments: string[] = [];
+if (commentEnabled && commentMode === 'preset' && !commentText) {
     throw new Error('DOOMSCROLL_COMMENT_TEXT is required when DOOMSCROLL_COMMENT_ENABLED=true');
 }
 const switchAccountName = process.env.INSTAGRAM_SWITCH_ACCOUNT?.trim() || undefined;
@@ -86,8 +96,6 @@ if (switchAccountName && !allowedAccounts.includes(switchAccountName)) {
 }
 let { x: likeX, y: likeY } = instagramCoordinates.like;
 const { x: commentX, y: commentY } = instagramCoordinates.comment;
-const { x: commentComposerX, y: commentComposerY } = instagramCoordinates.commentComposer;
-const { x: commentSendX, y: commentSendY } = instagramCoordinates.commentSend;
 const { startY: swipeStartY, endY: swipeEndY, durationMs: swipeDurationMs } = instagramCoordinates.swipe;
 // Left-of-center vertical flick avoids the Reels engagement rail.
 const swipeAxisX = Math.round(coordinates.screenSize.width * 0.38);
@@ -158,16 +166,23 @@ function engagementSettleMs(): number {
 
 let driver: Browser | undefined;
 let videosViewed = 0;
+let adsSkipped = 0;
+let completionAttempts = 0;
+let reelsCompleted = 0;
 let swipes = 0;
 let likes = 0;
 let comments = 0;
+let commentBrowses = 0;
+let commentLikes = 0;
 let recoveries = 0;
 const runStartedAt = Date.now();
 
 console.log(
     `Starting Instagram engage following: profile=${personality} requestedDurationMinutes=${durationMinutes}`
-    + ` likeEnabled=${likeEnabled} commentEnabled=${commentEnabled}`,
+    + ` likeEnabled=${likeEnabled} commentEnabled=${commentEnabled} watchToEndEnabled=${watchToEndEnabled}`,
 );
+
+let nextCommentBrowseAt = 2 + Math.floor(Math.random() * 3);
 
 async function dismissCommentSheet(
     browser: Browser,
@@ -225,18 +240,15 @@ async function dismissCommentSheet(
 async function postComment(
     browser: Browser,
     text: string,
+    deadline: number,
     isCommentSheetOpen?: () => Promise<boolean>,
-): Promise<void> {
-    await tapCoordinate(browser, commentX, commentY, 'Comment');
-    await browser.pause(800);
-    await tapCoordinate(browser, commentComposerX, commentComposerY, 'Comment composer');
-    await browser.pause(400);
-    await typeText(browser, text);
-    await browser.pause(300);
-    await tapCoordinate(browser, commentSendX, commentSendY, 'Comment send');
-    await browser.pause(900);
-    console.log('Dismissing comment sheet after send (dismiss button then fallbacks)');
-    await dismissCommentSheet(browser, isCommentSheetOpen);
+): Promise<boolean> {
+    try {
+        return await submitReelComment(browser, text,
+            () => !stopRequested && hasTimeRemaining(Date.now(), deadline), cancellableDelay);
+    } finally {
+        await dismissCommentSheet(browser, isCommentSheetOpen);
+    }
 }
 
 async function swipeNext(browser: Browser): Promise<void> {
@@ -279,6 +291,9 @@ try {
     });
 
     await driver.updateSettings({ defaultActiveApplication: instagramBundleId });
+    // Appium can establish a WDA session while SpringBoard remains foreground
+    // on newer iOS versions, even with forceAppLaunch enabled.
+    await driver.activateApp(instagramBundleId);
     await driver.pause(3000);
 
     if (switchAccountName) {
@@ -478,14 +493,42 @@ try {
         }
         if (stopRequested || !hasTimeRemaining(Date.now(), deadline)) break;
 
+        const adMarker = readReelAdMarker(await driver.getPageSource());
+        if (adMarker) {
+            adsSkipped += 1;
+            console.log(`Skipping sponsored reel (${adMarker})`);
+            await swipeNext(driver);
+            swipes += 1;
+            await cancellableDelay(clampToDeadline(Date.now(), deadline, 550 + Math.round(Math.random() * 250)));
+            continue;
+        }
+
         videosViewed += 1;
-        await cancellableDelay(clampToDeadline(Date.now(), deadline, pickWatchDurationMs(profile)));
+        const watchToEnd = watchToEndEnabled && decideWatchToCompletion(profile);
+        const watchMs = pickWatchDurationMs(profile);
+        if (watchToEnd) {
+            completionAttempts += 1;
+            console.log(`Watching reel ${videosViewed} to completion (maximum 90 seconds)`);
+            const watched = await watchReelToCompletion({
+                readProgress: () => readReelProgress(driver!),
+                delay: cancellableDelay,
+                now: Date.now,
+                isStopped: () => stopRequested,
+                deadline,
+                fallbackWatchMs: watchMs,
+            });
+            if (watched.reason === 'completed') reelsCompleted += 1;
+            console.log(`Reel completion watch: reason=${watched.reason} elapsedMs=${watched.elapsedMs}`);
+        } else {
+            await cancellableDelay(clampToDeadline(Date.now(), deadline, watchMs));
+        }
         if (stopRequested || !hasTimeRemaining(Date.now(), deadline)) break;
 
         const willLike = likeEnabled && decideLike(profile);
         const willComment = commentEnabled && decideComment(profile);
+        const willBrowseComments = videosViewed >= nextCommentBrowseAt;
 
-        if (willLike || willComment) {
+        if (willLike || willComment || willBrowseComments) {
             try {
                 const [freshShot, screen] = await Promise.all([
                     remoteControl.getScreenshot(udid),
@@ -539,15 +582,48 @@ try {
         if (willComment) {
             await cancellableDelay(clampToDeadline(Date.now(), deadline, interactionPauseMs()));
             if (stopRequested || !hasTimeRemaining(Date.now(), deadline)) break;
-            await postComment(driver, commentText, isCommentSheetOpen);
-            comments += 1;
+            const text = commentMode === 'meta-ai' || commentNiche
+                ? await draftContextualComment(driver, { deadline, isStopped: () => stopRequested,
+                    delay: cancellableDelay, recent: recentComments, niche: commentNiche,
+                    ...(commentMode === 'meta-ai' ? { guidance: commentText } : { presetText: commentText }) })
+                : commentText;
+            if (stopRequested || !hasTimeRemaining(Date.now(), deadline)) break;
+            if (text) {
+                const posted = await postComment(driver, text, deadline, isCommentSheetOpen);
+                if (posted) {
+                    comments += 1;
+                    recentComments.push(text);
+                    if (recentComments.length > 20) recentComments.shift();
+                }
+            }
             await cancellableDelay(clampToDeadline(Date.now(), deadline, engagementSettleMs()));
             await settleAfterEngage();
         }
         if (stopRequested || !hasTimeRemaining(Date.now(), deadline)) break;
 
+        if (willBrowseComments) {
+            nextCommentBrowseAt = videosViewed + 3 + Math.floor(Math.random() * 3);
+            try {
+                const liked = await browseReelComments(driver, {
+                    screen: coordinates.screenSize, comment: { x: commentX, y: commentY },
+                    active: () => !stopRequested && hasTimeRemaining(Date.now(), deadline),
+                    isOpen: isCommentSheetOpen,
+                    delay: cancellableDelay,
+                });
+                commentBrowses += 1;
+                commentLikes += liked;
+                console.log(`Browsed Reel comments and liked ${liked}`);
+            } catch (error) {
+                console.log(`Comment browsing skipped: ${error instanceof Error ? error.message : String(error)}`);
+            } finally {
+                if (await isCommentSheetOpen()) await dismissCommentSheet(driver, isCommentSheetOpen);
+            }
+            await settleAfterEngage();
+        }
+        if (stopRequested || !hasTimeRemaining(Date.now(), deadline)) break;
+
         const { linger, extraMs } = decideLinger(profile);
-        if (linger) {
+        if (linger && !watchToEnd) {
             await cancellableDelay(clampToDeadline(Date.now(), deadline, extraMs));
         }
         if (stopRequested || !hasTimeRemaining(Date.now(), deadline)) break;
@@ -561,7 +637,8 @@ try {
     const reason = stopRequested ? 'stopped' : 'completed';
     console.log(
         `Finished Instagram engage following: videosViewed=${videosViewed} swipes=${swipes} likes=${likes}`
-        + ` comments=${comments} recoveries=${recoveries}`
+        + ` comments=${comments} commentBrowses=${commentBrowses} commentLikes=${commentLikes}`
+        + ` adsSkipped=${adsSkipped} recoveries=${recoveries} completionAttempts=${completionAttempts} reelsCompleted=${reelsCompleted}`
         + ` elapsedMs=${elapsedMs} reason=${reason}`,
     );
 } finally {

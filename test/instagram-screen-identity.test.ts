@@ -11,6 +11,55 @@ async function solid(width: number, height: number, rgb: [number, number, number
     }).png().toBuffer();
 }
 
+function label(text: string, width: number, height: number, color: string): Buffer {
+    return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><text x="4" y="30" font-family="Arial" font-size="28" fill="${color}">${text}</text></svg>`);
+}
+
+test('a white Home header is not a Search field or a Reels feed', async () => {
+    const frame = await sharp({ create: {
+        width: 430, height: 932, channels: 3, background: '#fafafa',
+    } }).composite([
+        { input: await solid(14, 14, [20, 20, 22]), left: 43, top: 875 },
+        { input: await solid(14, 14, [20, 20, 22]), left: 129, top: 875 },
+    ]).png().toBuffer();
+    const identity = await identifyInstagramScreen(frame, 1);
+    assert.equal(identity.kind, 'home');
+    assert.ok(identity.reasons.includes('lightHeaderWithoutSearchField'));
+});
+
+test('bright Reels frames use header text before the Search brightness heuristic', async () => {
+    const frame = await sharp({ create: {
+        width: 430, height: 932, channels: 3, background: '#fafafa',
+    } }).composite([
+        { input: label('Reels', 100, 40, '#101010'), left: 125, top: 68 },
+        { input: label('Friends', 130, 40, '#999999'), left: 225, top: 68 },
+        { input: await solid(14, 14, [20, 20, 22]), left: 129, top: 875 },
+    ]).png().toBuffer();
+    const identity = await identifyInstagramScreen(frame, 1);
+    assert.equal(identity.kind, 'reels');
+    assert.ok(identity.reasons.includes('reelsHeaderText'));
+});
+
+test('Search requires a visible Search label in the header', async () => {
+    const frame = await sharp({ create: {
+        width: 430, height: 932, channels: 3, background: '#fafafa',
+    } }).composite([
+        { input: label('Search', 150, 40, '#101010'), left: 40, top: 68 },
+    ]).png().toBuffer();
+    assert.equal((await identifyInstagramScreen(frame, 1)).kind, 'search');
+});
+
+test('dark comment sheets are recognized by their composer', async () => {
+    const frame = await sharp({ create: {
+        width: 430, height: 932, channels: 3, background: '#191d1e',
+    } }).composite([
+        { input: label('Add a comment', 300, 40, '#eeeeee'), left: 70, top: 790 },
+    ]).png().toBuffer();
+    const identity = await identifyInstagramScreen(frame, 1);
+    assert.equal(identity.kind, 'comments');
+    assert.ok(identity.reasons.includes('commentComposer'));
+});
+
 test('identifyInstagramScreen treats unrecognized frames as off_feed', async () => {
     const frame = await sharp({
         create: { width: 402, height: 874, channels: 3, background: { r: 100, g: 120, b: 150 } },

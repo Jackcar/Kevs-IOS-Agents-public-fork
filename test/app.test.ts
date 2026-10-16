@@ -66,6 +66,7 @@ test('a configured auth provider adds a Log out link to the nav', async (context
 
     const css = await inject(app, { method: 'GET', url: '/assets/styles.css?v=x' });
     assert.match(String(css.headers['cache-control']), /immutable/);
+    assert.match(css.body, /\.schedule-fields\[hidden\]\s*\{\s*display:\s*none/);
     const cssBare = await inject(app, { method: 'GET', url: '/assets/styles.css' });
     assert.match(String(cssBare.headers['cache-control']), /no-cache/);
 });
@@ -143,7 +144,7 @@ test('serves and drives the public registration wizard', async (context) => {
 
     const page = await inject(app, { method: 'GET', url: '/devices/register' });
     assert.equal(page.statusCode, 200);
-    assert.match(page.body, /Register an? (?:iOS )?device/i);
+    assert.match(page.body.replace(/<[^>]*>/g, ''), /Register an? (?:iOS )?device/i);
 
     const candidates = await inject(app, { method: 'GET', url: '/api/device-registrations/candidates' });
     assert.equal(candidates.statusCode, 200);

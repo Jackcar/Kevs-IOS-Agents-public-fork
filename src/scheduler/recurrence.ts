@@ -33,12 +33,20 @@ export function validateTiming(timing: ScheduleTiming, now = new Date()): void {
     }
     if (timing.kind === 'interval') {
         const minutes = timing.everyMinutes;
-        if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
-            throw new Error('Interval schedules require everyMinutes between 1 and 1440');
+        if (!Number.isInteger(minutes) || minutes < 1 || minutes > 43_200) {
+            throw new Error('Interval schedules require everyMinutes between 1 and 43200');
         }
         const offset = timing.startOffsetMinutes ?? 0;
         if (!Number.isInteger(offset) || offset < 0 || offset > 24 * 60) {
             throw new Error('Interval startOffsetMinutes must be between 0 and 1440');
+        }
+        if (timing.startAt !== undefined) {
+            if (typeof timing.startAt !== 'string' || !Number.isFinite(new Date(timing.startAt).getTime())) {
+                throw new Error('Interval startAt must be an ISO timestamp');
+            }
+            if (timing.startOffsetMinutes !== undefined) {
+                throw new Error('Choose either interval startAt or startOffsetMinutes');
+            }
         }
         return;
     }
@@ -49,6 +57,12 @@ export function initialRunAt(timing: ScheduleTiming, now = new Date()): Date {
     if (timing.kind === 'now') return now;
     if (timing.kind === 'once') return new Date(timing.runAt);
     if (timing.kind === 'interval') {
+        if (timing.startAt !== undefined) {
+            const startMs = new Date(timing.startAt).getTime();
+            const stepMs = timing.everyMinutes * 60_000;
+            const steps = Math.max(0, Math.ceil((now.getTime() - startMs) / stepMs));
+            return new Date(startMs + steps * stepMs);
+        }
         const offsetMs = (timing.startOffsetMinutes ?? 0) * 60_000;
         return new Date(now.getTime() + offsetMs);
     }

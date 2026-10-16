@@ -2,10 +2,27 @@
 <p>Schedule one-off or recurring private workflows. Device-specific accounts and coordinates belong in <code>pluginData["com.git-agni.instagram"]</code>.</p>
 <form id="instagram-doomscroll-form" class="instagram-form">
   <h3>Warmup</h3>
-  <div class="timing"><label>Duration (minutes)<input name="duration" type="number" min="1" max="180" value="5" required></label><label>Personality<select name="personality"><option>casual</option><option>skimmer</option><option>engaged</option></select></label><label>Account<input name="account" autocomplete="off"></label></div>
+  <div class="timing"><label>Duration (minutes)<input name="duration" type="number" min="1" max="360" value="15" required></label><label>Personality<select name="personality"><option>casual</option><option>skimmer</option><option>engaged</option><option>dialed</option></select></label><label>Account<input name="account" autocomplete="off"></label></div>
   <div><label><input name="like" type="checkbox" checked> Like</label> <label><input name="comment" type="checkbox"> Comment</label></div>
-  <div class="timing" data-timing><label>Schedule<select name="timingKind"><option value="now">Run now</option><option value="once">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label><label>When / local time<input name="time" type="datetime-local"></label><label>Weekdays (0–6)<input name="weekdays" placeholder="1,3,5"></label></div>
+  <label><input name="watchToEnd" type="checkbox" checked> Watch some reels to the end (up to 90 seconds)</label>
+  <label>Comment style<select name="commentMode"><option value="meta-ai">Related to the reel (Meta AI)</option><option value="preset">Preset text</option></select></label>
+  <label>Topics to find (optional)<input name="commentNiche" maxlength="160" placeholder="baby, sleep training, baby sleep tips"></label>
+  <p>Separate topics with commas. Unrelated or unclear reels are skipped. Leave blank for all topics.</p>
+  <label>Your experience, advice, or preset comment (optional for Meta AI)<input name="commentText" maxlength="240"></label>
+  <p>Related comments use “About this reel” and the caption. Reels without a readable summary are skipped.</p>
+  <div class="timing" data-timing><label>Schedule<select name="timingKind"><option value="now">Run now</option><option value="once">Once</option><option value="interval">Every X hours</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label><label>When / local time<input name="time" type="datetime-local"></label><label>Weekdays (0–6)<input name="weekdays" placeholder="1,3,5"></label></div>
+  <label>Every (hours, for interval schedules)<input name="everyHours" type="number" min="1" max="720" value="6"></label>
   <button type="submit">Schedule warmup</button>
+</form>
+<form id="instagram-topic-engagement-panel-form" class="instagram-form">
+  <h3>Topic engagement</h3>
+  <p>Searches one topic, opens Reels results, and attempts a contextual comment on every non-sponsored Reel.</p>
+  <label>Search topic<input name="searchTopic" maxlength="100" required placeholder="baby sleep training"></label>
+  <label>Your real experience or advice (optional)<textarea name="commentText" maxlength="240" placeholder="Dreamer helped us spot our baby's sleep patterns..."></textarea></label>
+  <div class="timing"><label>Duration (minutes)<input name="duration" type="number" min="1" max="360" value="15" required></label><label>Personality<select name="personality"><option>engaged</option><option>casual</option><option>skimmer</option><option>dialed</option></select></label><label>Account<input name="account" autocomplete="off"></label></div>
+  <p>Personality controls watching and likes; it does not reduce comment attempts.</p>
+  <div><label><input name="like" type="checkbox" checked> Like</label> <label><input name="watchToEnd" type="checkbox" checked> Watch some Reels to the end</label></div>
+  <button type="submit">Start topic engagement</button>
 </form>
 <p id="instagram-form-result" class="muted"></p>
 <script>
@@ -18,6 +35,7 @@
     if (kind === 'now') return {kind: 'now'};
     var raw = String(form.get('time') || '');
     if (!raw) throw new Error('Choose a date/time.');
+    if (kind === 'interval') return {kind: 'interval', everyMinutes: Number(form.get('everyHours')) * 60, startAt: new Date(raw).toISOString()};
     if (kind === 'once') return {kind: 'once', runAt: new Date(raw).toISOString()};
     var localTime = raw.includes('T') ? raw.split('T')[1].slice(0, 5) : raw.slice(0, 5);
     var base = {kind: kind, localTime: localTime, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone};
@@ -32,7 +50,11 @@
   }
   document.getElementById('instagram-doomscroll-form').addEventListener('submit', async function (event) {
     event.preventDefault(); result.textContent = 'Scheduling…';
-    try { var form = new FormData(event.currentTarget); var payload = {durationMinutes: Number(form.get('duration')), personality: form.get('personality'), likeEnabled: form.has('like'), commentEnabled: form.has('comment')}; if (form.get('account')) payload.account = form.get('account'); await schedule('doomscroll', payload, timing(form)); } catch (error) { result.textContent = error.message; }
+    try { var form = new FormData(event.currentTarget); var payload = {durationMinutes: Number(form.get('duration')), personality: form.get('personality'), likeEnabled: form.has('like'), commentEnabled: form.has('comment'), watchToEndEnabled: form.has('watchToEnd'), commentMode: form.get('commentMode'), commentNiche: String(form.get('commentNiche') || ''), commentText: String(form.get('commentText') || '')}; if (form.get('account')) payload.account = form.get('account'); await schedule('doomscroll', payload, timing(form)); } catch (error) { result.textContent = error.message; }
+  });
+  document.getElementById('instagram-topic-engagement-panel-form').addEventListener('submit', async function (event) {
+    event.preventDefault(); result.textContent = 'Scheduling…';
+    try { var form = new FormData(event.currentTarget); var payload = {durationMinutes: Number(form.get('duration')), personality: form.get('personality'), likeEnabled: form.has('like'), watchToEndEnabled: form.has('watchToEnd'), searchTopic: String(form.get('searchTopic') || ''), commentText: String(form.get('commentText') || '')}; if (form.get('account')) payload.account = form.get('account'); await schedule('topic-engagement', payload, {kind: 'now'}); } catch (error) { result.textContent = error.message; }
   });
 })();
 </script>

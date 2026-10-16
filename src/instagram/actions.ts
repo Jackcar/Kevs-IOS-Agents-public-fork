@@ -21,6 +21,35 @@ export async function tapCoordinate(driver: Browser, x: number, y: number, label
     console.log(`Tapped ${label} at (${x}, ${y})`);
 }
 
+/** Reels controls move vertically with captions; prefer Instagram's button IDs. */
+export async function tapInstagramButton(
+    driver: Browser, accessibilityId: string, x: number, y: number, label: string,
+): Promise<void> {
+    let button: Awaited<ReturnType<Browser['$']>> | undefined;
+    try {
+        const candidate = await driver.$(`~${accessibilityId}`);
+        if (await candidate.isDisplayed()) button = candidate;
+    } catch (error) {
+        console.log(`Could not locate ${label}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (button) {
+        // Keep click errors outside the lookup fallback to avoid double interactions.
+        await button.click();
+        console.log(`Tapped ${label} using ${accessibilityId}`);
+        return;
+    }
+    await tapCoordinate(driver, x, y, label);
+}
+
+export async function hasInstagramReelsControls(driver: Browser, requireSelectedTab = true): Promise<boolean> {
+    const tab = await driver.$('~reels-tab');
+    if (requireSelectedTab && await tab.getAttribute('value') !== '1') return false;
+    const like = await driver.$('~like-button');
+    if (!await like.isDisplayed()) return false;
+    const comment = await driver.$('~comment-button');
+    return comment.isDisplayed();
+}
+
 /** Coach-mark / feed tutorial copy Instagram overlays on Home. */
 const FEED_TUTORIAL_HINTS = [
     'skip',

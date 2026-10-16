@@ -30,8 +30,8 @@ export type ScheduleTiming =
     | { kind: 'once'; runAt: string }
     | { kind: 'daily'; localTime: string; timezone: string }
     | { kind: 'weekly'; localTime: string; timezone: string; weekdays: number[] }
-    /** Repeating timer — useful for testing pipeline drains without waiting for clock slots. */
-    | { kind: 'interval'; everyMinutes: number; startOffsetMinutes?: number };
+    /** Fixed elapsed-time interval, optionally anchored to a start date. */
+    | { kind: 'interval'; everyMinutes: number; startAt?: string; startOffsetMinutes?: number };
 
 export interface TaskEnvelope<TPayload extends JsonObject = JsonObject> {
     pluginId: string;

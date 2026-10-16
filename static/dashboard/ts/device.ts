@@ -36,7 +36,7 @@ interface PostRun {
     logs: string[];
 }
 
-type SocialTaskType = 'doomscroll' | 'doomscroll-following' | 'post';
+type SocialTaskType = 'doomscroll' | 'doomscroll-following' | 'topic-engagement' | 'post';
 type SocialPluginId = 'com.git-agni.tiktok' | 'com.git-agni.instagram' | string;
 type CalibrateApp = 'tiktok' | 'instagram' | 'linkedin';
 
@@ -53,6 +53,7 @@ interface DeviceSchedule {
         account?: string;
         durationMinutes?: number;
         personality?: string;
+        searchTopic?: string;
     };
 }
 
@@ -150,6 +151,14 @@ const elements = {
     cancelInstagramDoomscroll: element<HTMLButtonElement>('#cancel-instagram-doomscroll'),
     instagramDoomscrollDuration: element<HTMLInputElement>('#instagram-doomscroll-duration'),
     instagramDoomscrollDurationButtons: Array.from(document.querySelectorAll<HTMLButtonElement>('[data-instagram-doomscroll-duration]')),
+    openInstagramTopicEngagement: element<HTMLButtonElement>('#open-instagram-topic-engagement'),
+    instagramTopicEngagementDialog: element<HTMLDialogElement>('#instagram-topic-engagement-dialog'),
+    closeInstagramTopicEngagement: element<HTMLButtonElement>('#close-instagram-topic-engagement'),
+    cancelInstagramTopicEngagement: element<HTMLButtonElement>('#cancel-instagram-topic-engagement'),
+    instagramTopicEngagementForm: element<HTMLFormElement>('#instagram-topic-engagement-form'),
+    instagramTopicEngagementDuration: element<HTMLInputElement>('#instagram-topic-engagement-duration'),
+    instagramTopicEngagementDurationButtons: Array.from(document.querySelectorAll<HTMLButtonElement>('[data-instagram-topic-engagement-duration]')),
+    instagramTopicEngagementResult: element<HTMLElement>('#instagram-topic-engagement-result'),
     openInstagramFollowingDoomscroll: element<HTMLButtonElement>('#open-instagram-following-doomscroll'),
     instagramFollowingDoomscrollDialog: element<HTMLDialogElement>('#instagram-following-doomscroll-dialog'),
     closeInstagramFollowingDoomscroll: element<HTMLButtonElement>('#close-instagram-following-doomscroll'),
@@ -159,6 +168,7 @@ const elements = {
     instagramFollowingDoomscrollDurationButtons: Array.from(document.querySelectorAll<HTMLButtonElement>('[data-instagram-following-doomscroll-duration]')),
     instagramFollowingCommentEnabled: element<HTMLInputElement>('#instagram-following-comment-enabled'),
     instagramFollowingCommentText: element<HTMLInputElement>('#instagram-following-comment-text'),
+    instagramFollowingCommentMode: element<HTMLSelectElement>('#instagram-following-comment-mode'),
     instagramFollowingDoomscrollResult: element<HTMLElement>('#instagram-following-doomscroll-result'),
     openInstagramColdDms: element<HTMLButtonElement>('#open-instagram-cold-dms'),
     instagramColdDmsDialog: element<HTMLDialogElement>('#instagram-cold-dms-dialog'),
@@ -173,12 +183,16 @@ const elements = {
     instagramDoomscrollForm: element<HTMLFormElement>('#instagram-doomscroll-form'),
     instagramCommentEnabled: element<HTMLInputElement>('#instagram-comment-enabled'),
     instagramCommentText: element<HTMLInputElement>('#instagram-comment-text'),
+    instagramCommentMode: element<HTMLSelectElement>('#instagram-comment-mode'),
     instagramDoomscrollRecurring: element<HTMLInputElement>('#instagram-doomscroll-recurring'),
     instagramDoomscrollStartOptions: element<HTMLElement>('#instagram-doomscroll-start-options'),
     instagramDoomscrollStartKind: element<HTMLSelectElement>('#instagram-doomscroll-start-kind'),
     instagramDoomscrollOnceFields: element<HTMLElement>('#instagram-doomscroll-once-fields'),
     instagramDoomscrollRecurringFields: element<HTMLElement>('#instagram-doomscroll-recurring-fields'),
     instagramDoomscrollFrequency: element<HTMLSelectElement>('#instagram-doomscroll-frequency'),
+    instagramDoomscrollIntervalFields: element<HTMLElement>('#instagram-doomscroll-interval-fields'),
+    instagramDoomscrollEveryHours: element<HTMLInputElement>('#instagram-doomscroll-every-hours'),
+    instagramDoomscrollLocalTimeField: element<HTMLElement>('#instagram-doomscroll-local-time-field'),
     instagramDoomscrollWeekdayFields: element<HTMLElement>('#instagram-doomscroll-weekday-fields'),
     instagramDoomscrollWeekdayInputs: Array.from(document.querySelectorAll<HTMLInputElement>('#instagram-doomscroll-weekday-fields input[type="checkbox"]')),
     instagramDoomscrollRunWindowField: element<HTMLElement>('#instagram-doomscroll-run-window-field'),
@@ -519,11 +533,15 @@ function updateInstagramDoomscrollSchedule(): void {
     elements.instagramDoomscrollScheduleKind.value = kind;
     elements.instagramDoomscrollWeekdays.value = selectedWeekdays(elements.instagramDoomscrollWeekdayInputs).join(',');
     elements.instagramDoomscrollStartOptions.hidden = recurring;
-    elements.instagramDoomscrollOnceFields.hidden = recurring || kind !== 'once';
+    elements.instagramDoomscrollOnceFields.hidden = kind !== 'once' && kind !== 'interval';
+    elements.instagramDoomscrollIntervalFields.hidden = kind !== 'interval';
+    elements.instagramDoomscrollEveryHours.disabled = kind !== 'interval';
+    elements.instagramDoomscrollEveryHours.required = kind === 'interval';
+    elements.instagramDoomscrollLocalTimeField.hidden = kind === 'interval';
     elements.instagramDoomscrollRecurringFields.hidden = !recurring;
     elements.instagramDoomscrollWeekdayFields.hidden = !recurring || kind !== 'weekly';
     elements.instagramDoomscrollRunWindowField.hidden = kind === 'now';
-    elements.instagramDoomscrollRunAt.required = kind === 'once';
+    elements.instagramDoomscrollRunAt.required = kind === 'once' || kind === 'interval';
 }
 
 function updatePostSchedule(): void {
@@ -974,6 +992,11 @@ function pluginLabel(pluginId: SocialPluginId | undefined): string {
 
 function taskTitle(taskType: DeviceSchedule['taskType'], payload?: DeviceSchedule['payload'], pluginId?: SocialPluginId): string {
     const app = pluginLabel(pluginId);
+    if (taskType === 'topic-engagement') {
+        const details = payload?.durationMinutes ? ` · ${payload.durationMinutes} min` : '';
+        const topic = payload?.searchTopic ? ` · ${payload.searchTopic}` : '';
+        return `${app} topic engagement${topic}${details}`;
+    }
     if (taskType === 'doomscroll' || taskType === 'doomscroll-following') {
         const isInstagram = pluginId === 'com.git-agni.instagram';
         const label = taskType === 'doomscroll-following'
@@ -1069,6 +1092,7 @@ function renderDeviceExecutions(executions: DeviceExecution[]): void {
         actions.className = 'inline-actions';
         if (execution.status === 'queued' || (execution.status === 'running' && (
             execution.taskType === 'doomscroll' || execution.taskType === 'doomscroll-following'
+            || execution.taskType === 'topic-engagement'
         ))) {
             actions.append(taskActionButton(execution.status === 'queued' ? 'Cancel' : 'Stop', async () => {
                 await jsonRequest(`/api/executions/${execution.id}/stop`, { method: 'POST' });
@@ -1864,18 +1888,38 @@ elements.followingCommentEnabled.addEventListener('change', () => {
     }
 });
 
-elements.instagramCommentEnabled.addEventListener('change', () => {
-    elements.instagramCommentText.disabled = !elements.instagramCommentEnabled.checked;
-    if (elements.instagramCommentEnabled.checked && !elements.instagramCommentText.value.trim()) {
-        elements.instagramCommentText.value = '🔥';
-    }
+for (const controls of [
+    { enabled: elements.instagramCommentEnabled, mode: elements.instagramCommentMode, text: elements.instagramCommentText },
+    { enabled: elements.instagramFollowingCommentEnabled, mode: elements.instagramFollowingCommentMode, text: elements.instagramFollowingCommentText },
+]) {
+    const update = () => {
+        controls.text.disabled = !controls.enabled.checked;
+        controls.text.required = !controls.text.disabled && controls.mode.value === 'preset';
+        controls.text.maxLength = controls.mode.value === 'meta-ai' ? 240 : 150;
+    };
+    controls.enabled.addEventListener('change', update);
+    controls.mode.addEventListener('change', update);
+    update();
+}
+elements.openInstagramTopicEngagement.addEventListener('click', () => elements.instagramTopicEngagementDialog.showModal());
+elements.closeInstagramTopicEngagement.addEventListener('click', () => elements.instagramTopicEngagementDialog.close());
+elements.cancelInstagramTopicEngagement.addEventListener('click', () => elements.instagramTopicEngagementDialog.close());
+elements.instagramTopicEngagementDurationButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        elements.instagramTopicEngagementDuration.value = button.dataset.instagramTopicEngagementDuration ?? '15';
+    });
 });
-elements.instagramFollowingCommentEnabled.addEventListener('change', () => {
-    elements.instagramFollowingCommentText.disabled = !elements.instagramFollowingCommentEnabled.checked;
-    if (elements.instagramFollowingCommentEnabled.checked && !elements.instagramFollowingCommentText.value.trim()) {
-        elements.instagramFollowingCommentText.value = '🔥';
+elements.instagramTopicEngagementForm.addEventListener('htmx:afterRequest', ((event: CustomEvent) => {
+    const detail = event.detail as { successful?: boolean; xhr?: XMLHttpRequest };
+    if (detail.successful) {
+        elements.instagramTopicEngagementResult.textContent = 'Started.';
+        elements.instagramTopicEngagementDialog.close();
+    } else {
+        elements.instagramTopicEngagementResult.textContent = detail.xhr?.responseText
+            ? 'Could not start — check Activity.'
+            : 'Request failed.';
     }
-});
+}) as EventListener);
 elements.openInstagramFollowingDoomscroll.addEventListener('click', () => elements.instagramFollowingDoomscrollDialog.showModal());
 elements.closeInstagramFollowingDoomscroll.addEventListener('click', () => elements.instagramFollowingDoomscrollDialog.close());
 elements.cancelInstagramFollowingDoomscroll.addEventListener('click', () => elements.instagramFollowingDoomscrollDialog.close());
@@ -2037,4 +2081,3 @@ elements.followingDoomscrollForm.addEventListener('htmx:afterRequest', ((event: 
             : 'Request failed.';
     }
 }) as EventListener);
-
